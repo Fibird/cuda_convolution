@@ -7,39 +7,38 @@
 
 typedef short element;
 
-__constant__ element M[MAX_MASK_WIDTH];
+__constant__ short M[MAX_MASK_WIDTH];
 
 __global__ void convolution_1D_basic_kernel(element *N, element *P, int Mask_Width, int Width)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    __shared__ element N_ds[TILE_SIZE + MAX_MASK_WIDTH - 1];
+    __shared__ element N_ds[TILE_SIZE];
 
-    int n = MAX_MASK_WIDTH / 2;
-
-    int halo_index_left = (blockIdx.x - 1) * blockDim.x + threadIdx.x;
-    if (threadIdx.x >= blockDim.x - n)
-    {
-        N_ds[threadIdx.x - (blockDim.x - n)] = 
-        (halo_index_left < 0) ? 0 : N[halo_index_left];
-    }
-
-    N_ds[n + threadIdx.x] = N[i];
-
-    int halo_index_right = (blockIdx.x + 1) * blockDim.x + threadIdx.x;
-    if (threadIdx.x < n)
-    {
-        N_ds[n + blockDim.x + threadIdx.x] = 
-        (halo_index_right >= Width) ? 0 : N[halo_index_right];
-    }
+    N_ds[threadIdx.x] = N[i];
 
     __syncthreads();
+    
+    int this_tile_start_point = blockIdx.x * blockDim.x;
+    int next_tile_start_point = (blockIdx.x + 1) * blockDim.x;
+    int N_start_point = i - (Mask_Width / 2);
+    float Pvalue = 0;
 
-    element Pvalue = 0;
     for (int j = 0; j < Mask_Width; j++)
     {
-        Pvalue += N_ds[threadIdx.x + j] * M[j];
+        int N_index = N_start_point + j;
+        if (N_index >= 0 && N_index <= Width)
+        {
+            if (N_index >= this_tile_start_point 
+                && N_index <= next_tile_start_point)
+                {
+                    Pvalue += N_ds[threadIdx.x + j - Mask_Width] * M[j];
+                }
+                else
+                {
+                    Pvalue += N[N_index] * M[j];
+                }
+        }
     }
-    P[i] = Pvalue / MAX_MASK_WIDTH; 
 }
 
 int main(int argc, char **argv)
