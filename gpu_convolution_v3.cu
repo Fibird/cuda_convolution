@@ -48,6 +48,10 @@ int main(int argc, char **argv)
         printf("Please specify file name!\n");
         exit(EXIT_FAILURE);
     }
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    float elapsedTime;
     element *data = NULL;
     element *data_clear = NULL;
     element *dev_data, *dev_data_clear;
@@ -85,8 +89,11 @@ int main(int argc, char **argv)
 
     dim3 block(TILE_SIZE, 1);
     dim3 grid((block.x - 1 + size) / block.x, 1);
-
+    
+    cudaEventRecord(start, 0);
     convolution_1D_basic_kernel<<<grid, block>>>(dev_data, dev_data_clear, MAX_MASK_WIDTH, size); 
+    cudaEventRecord(stop, 0);
+    cudaEventSynchronize(stop);
     
     cudaMemcpy(data_clear, dev_data_clear, sizeof(element) * size, cudaMemcpyDeviceToHost);
 
@@ -102,11 +109,15 @@ int main(int argc, char **argv)
 
     fclose(f);
     f = NULL;
-    
+    cudaEventElapsedTime(&elapsedTime, start, stop);
+    printf("%s elapsed %f ms\n", argv[0], elapsedTime);
+
     free(data);
     free(data_clear);
 
     cudaFree(dev_data);
     cudaFree(dev_data_clear);
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
     return 0;    
 }

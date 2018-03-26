@@ -16,4 +16,7 @@ tags
 ### executable program ###
 bin/
 *.out
+
+### result files ###
+*_rst.wav
 # End of https://www.gitignore.io/api/vim
