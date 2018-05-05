@@ -51,7 +51,7 @@ __global__ void _conv2D(const element *signal, element *result, unsigned width, 
 	    	value  += cache[(ll_iy - radius + i) * sh_cols + ll_ix - radius + j] * Mask[i * ks + j];
 
 	// Gets result 
-    result[gl_iy * width + gl_ix] = value / (double)(ks * ks);
+    result[gl_iy * width + gl_ix] = value;
 }
 
 void conv2D(const cv::Mat &src, cv::Mat &dst, int ks, const cv::Mat &mask)

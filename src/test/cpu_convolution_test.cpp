@@ -1,7 +1,7 @@
-#include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
-#include "gpu_convolution.h"
 #include <iostream>
+#include <ctime>
+#include "cpu_convolution.h"
 
 using namespace std;
 using namespace cv;
@@ -24,20 +24,16 @@ int main(int argc, char **argv)
     Mat kernel = Mat::eye(ks, ks, CV_32FC1);
     
 	float elapsedTime;
-	cudaEvent_t start, stop;
-	cudaEventCreate(&start);
-    cudaEventCreate(&stop);
+    clock_t start, stop;
+    
+    start = clock();
+	conv2D(image, result, kernel);
+    stop = clock();
+    
+    elapsedTime = (double) (stop - start) * 1000 / CLOCKS_PER_SEC;
 
-    // execute median filter and time it
-	cudaEventRecord(start, 0);
-
-	conv2D(image, result, ks, kernel);
-
-	cudaEventRecord(stop, 0);
-	cudaEventSynchronize(stop);
-	cudaEventElapsedTime(&elapsedTime, start, stop);
 	cout << elapsedTime << " ms"<< endl;
     result.convertTo(result, CV_8UC1);
-    imwrite("result/restor.jpg", result);
+    imwrite("result/cpu_conv.jpg", result);
 	return 0;
 }
