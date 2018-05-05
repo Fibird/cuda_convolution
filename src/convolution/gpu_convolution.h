@@ -24,6 +24,6 @@ typedef float element;
 // constant memory used to save covolution kernel
 __constant__ element Mask[MAX_SPACE];
 
-void conv2D(cv::Mat src, cv::Mat dst, int ks);
+void conv2D(const cv::Mat &src, cv::Mat &dst, int ks, const cv::Mat &mask);
 
 #endif

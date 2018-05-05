@@ -8,7 +8,6 @@ __global__ void _conv2D(const element *signal, element *result, unsigned width, 
     extern __shared__ element cache[];
     int sh_cols = ts_per_dm + radius * 2;
     int bk_cols = ts_per_dm;    int bk_rows = ts_per_dm;
-    unsigned sg_cols = width + radius * 2;
 
 	int gl_ix = threadIdx.x + blockDim.x * blockIdx.x;
 	int gl_iy = threadIdx.y + blockDim.y * blockIdx.y;
@@ -16,31 +15,31 @@ __global__ void _conv2D(const element *signal, element *result, unsigned width, 
     int ll_iy = threadIdx.y + radius;
 
 	// Reads input elements into shared memory
-	cache[ll_iy * sh_cols + ll_ix] = signal[gl_iy * sg_cols + gl_ix];
+	cache[ll_iy * sh_cols + ll_ix] = signal[gl_iy * width + gl_ix];
     // Marginal elements in cache
 	if (threadIdx.x < radius)
 	{
-        int id = gl_iy * sg_cols + gl_ix - radius;
+        int id = gl_iy * width + gl_ix - radius;
         cache[ll_iy * sh_cols + ll_ix - radius] = gl_ix < radius ? 0 : signal[id];
-        id = gl_iy * sg_cols + gl_ix + bk_cols;
+        id = gl_iy * width + gl_ix + bk_cols;
         cache[ll_iy * sh_cols + ll_ix + bk_cols] = gl_ix + bk_cols >= width ? 0 : signal[id];
 	}
 	if (threadIdx.y < radius)
 	{
-        int id = (gl_iy - radius) * sg_cols + gl_ix; 
+        int id = (gl_iy - radius) * width + gl_ix; 
         cache[(ll_iy - radius) * sh_cols + ll_ix] = gl_iy < radius ? 0 : signal[id];
-        id = (gl_iy + bk_rows) * sg_cols + gl_ix;
+        id = (gl_iy + bk_rows) * width + gl_ix;
         cache[(ll_iy + bk_rows) * sh_cols + ll_ix] = gl_iy + bk_rows >= height ? 0 :signal[id];
 	}
     if (threadIdx.x < radius && threadIdx.y < radius)
     {
-        int id = (gl_iy - radius) * sg_cols + gl_ix - radius;
+        int id = (gl_iy - radius) * width + gl_ix - radius;
         cache[(ll_iy - radius) * sh_cols + ll_ix - radius] = gl_iy < radius ? 0 : signal[id];
-        id = (gl_iy - radius) * sg_cols + gl_ix + bk_cols;
+        id = (gl_iy - radius) * width + gl_ix + bk_cols;
         cache[(ll_iy - radius) * sh_cols + ll_ix + bk_cols] = gl_iy < radius ? 0 : signal[id];
-        id = (gl_iy + bk_rows) * sg_cols + gl_ix + bk_cols;
+        id = (gl_iy + bk_rows) * width + gl_ix + bk_cols;
         cache[(ll_iy + bk_rows) * sh_cols + ll_ix + bk_cols] = gl_iy + bk_rows >= height ? : signal[id];
-        id = (gl_iy + bk_rows) * sg_cols + gl_ix - radius;
+        id = (gl_iy + bk_rows) * width + gl_ix - radius;
         cache[(ll_iy + bk_rows) * sh_cols + ll_ix - radius] = gl_iy + bk_rows >= height ? 0 : signal[id];
     }
 	__syncthreads();
@@ -49,15 +48,17 @@ __global__ void _conv2D(const element *signal, element *result, unsigned width, 
     element value = 0;
     for (int i = 0; i < ks; ++i)
 	    for (int j = 0; j < ks; ++j)
-	    	value  = cache[(ll_iy - radius + i) * sh_cols + ll_ix - radius + j] * Mask[i * ks + j];
+	    	value  += cache[(ll_iy - radius + i) * sh_cols + ll_ix - radius + j] * Mask[i * ks + j];
 
 	// Gets result 
-    result[gl_iy * width + gl_ix] = value / (ks * ks);
+    result[gl_iy * width + gl_ix] = value / (double)(ks * ks);
 }
 
-void conv2D(cv::Mat src, cv::Mat dst, int ks)
+void conv2D(const cv::Mat &src, cv::Mat &dst, int ks, const cv::Mat &mask)
 {
     if (!src.data)
+        return;
+    if (!src.isContinuous())
         return;
 
     unsigned width = src.size().width;
@@ -71,13 +72,18 @@ void conv2D(cv::Mat src, cv::Mat dst, int ks)
     CHECK(cudaMalloc((void**)&dev_src, sizeof(element) * width * height));
     CHECK(cudaMalloc((void**)&dev_dst, sizeof(element) * width * height));
 
+    // transfer data to be filtered
     CHECK(cudaMemcpy(dev_src, (element*)src.data, sizeof(element) * width * height, cudaMemcpyHostToDevice));
+    // copy mask data to constant memcoy - Mask
+    CHECK(cudaMemcpyToSymbol(Mask, (element*)mask.data, sizeof(element) * ks * ks));
 
     // Set up execution configuration
     int ts_per_dm = 32;
     dim3 block(ts_per_dm, ts_per_dm);
     dim3 grid((width + block.x - 1) / block.x, (height + block.y - 1) / block.y);
-    _conv2D<<<grid, block>>>(dev_src, dev_dst, width, height, ks, ts_per_dm);
+    unsigned shared_size = (ts_per_dm + ks - 1) * (ts_per_dm + ks - 1) * sizeof(element);
+
+    _conv2D<<<grid, block, shared_size>>>(dev_src, dev_dst, width, height, ks, ts_per_dm);
     CHECK(cudaDeviceSynchronize());
 
     CHECK(cudaMemcpy(dst_data, dev_dst, sizeof(element) * width * height, cudaMemcpyDeviceToHost));
