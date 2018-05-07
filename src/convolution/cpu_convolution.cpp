@@ -15,11 +15,11 @@ void _conv2D(element *src, element *dst, element *kernel, unsigned width, unsign
                     unsigned ll_x = j - radius + x;
                     unsigned ll_y = i - radius + y;
                     if (!(ll_x < 0 || ll_x >= width || 
-                        ll_y < 0 || ll_y > height))
+                        ll_y < 0 || ll_y >= height))
                         value += src[ll_y * width + ll_x] * kernel[y * ks + x];
                 }
             }
-            dst[i * height + j] = value;
+            dst[i * width + j] = value;
         }
     }
 }
