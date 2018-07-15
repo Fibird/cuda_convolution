@@ -54,7 +54,7 @@ __global__ void _conv2D(const element *signal, element *result, unsigned width, 
     result[gl_iy * width + gl_ix] = value;
 }
 
-void conv2D(const cv::Mat &src, cv::Mat &dst, int ks, const cv::Mat &mask)
+void conv2D(const cv::Mat &src, cv::Mat &dst, const cv::Mat &mask)
 {
     if (!src.data)
         return;
@@ -64,6 +64,7 @@ void conv2D(const cv::Mat &src, cv::Mat &dst, int ks, const cv::Mat &mask)
     unsigned width = src.size().width;
     unsigned height = src.size().height;
     int img_type = src.type();
+    int ks = mask.size().width;
     
     element *dev_src, *dev_dst;
     element *dst_data;
